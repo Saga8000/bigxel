@@ -60,6 +60,29 @@ Checks: `npm run build` and `npm run lint`.
 
 Seeded screens are flagged `is_demo` and display a "Demo listing" badge.
 
+## Environments
+
+`APP_ENV` can be `development`, `staging` or `production`:
+
+| | development | staging | production |
+|---|---|---|---|
+| Simulated wallet top-ups (`PAYMENTS_MODE=simulated`) | yes | yes | refused at startup |
+| Password-reset link shown on screen | yes | no | no |
+| `python -m app.seed` demo data | yes | only with `DEMO_PASSWORD` set | refused |
+| `SECRET_KEY` required | no (random per run) | yes | yes |
+
+## Deploying staging (Render)
+
+The `Dockerfile` at the repo root builds the frontend and runs FastAPI, which serves both the API and the website from one URL. `backend/start.sh` runs `alembic upgrade head` on every start, and also seeds demo data when `SEED_DEMO=true`.
+
+1. Push this repository to GitHub.
+2. On render.com, choose **New → Blueprint**, then pick the repository. `render.yaml` creates a free PostgreSQL database and the `bigxel-staging` web service, and generates `SECRET_KEY` and `DEMO_PASSWORD`.
+3. Once it's live, open the service's **Environment** tab to see `DEMO_PASSWORD`, then log in with the demo accounts. If the URL isn't `https://bigxel-staging.onrender.com`, update `CORS_ORIGINS` and `FRONTEND_URL`.
+
+Free-tier limits: the service sleeps when idle, so the first request takes about a minute; uploaded files are lost on restart or redeploy; the free database expires after 30 days.
+
+To build and run the image yourself: `docker build -t bigxel .`, then `docker run -p 8000:8000 -e APP_ENV=staging -e DATABASE_URL=... -e SECRET_KEY=... bigxel`.
+
 ## Security
 
 - Passwords are hashed with bcrypt. Sessions use a JWT stored in an HTTP-only `SameSite=Lax` cookie (`bigxel_session`). Set `COOKIE_SECURE=true` when serving over HTTPS.

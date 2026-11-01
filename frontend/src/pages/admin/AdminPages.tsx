@@ -167,7 +167,7 @@ export function AdminPayments() {
   return (
     <>
       <PageHeader title="Payments" subtitle="Every wallet ledger entry across the platform." />
-      <Alert tone="info" className="mb-4">No payment gateway is connected. Top-ups marked “Simulated” were created in development mode.</Alert>
+      <Alert tone="info" className="mb-4">No payment gateway is connected. Top-ups marked “Simulated” are demo credit, not real money.</Alert>
       {loading ? <PageLoader /> : error || !data ? <Alert tone="error">{error}</Alert> : data.length === 0 ? <EmptyState title="No transactions" /> : (
         <Table head={["Date", "User", "Description", "Type", "Amount"]}>
           {data.map((t) => (

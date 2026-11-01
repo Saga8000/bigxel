@@ -1,9 +1,9 @@
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -65,3 +65,18 @@ for r in (auth, screens, uploads, contact, advertiser, owner, admin):
 
 settings.upload_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+# In deployments the built frontend is served by this app; locally Vite serves it instead.
+if settings.frontend_dist and (settings.frontend_dist / "index.html").is_file():
+    dist = settings.frontend_dist.resolve()
+    index_html = dist / "index.html"
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> Response:
+        if path.startswith(("api/", "uploads/")):
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
+        candidate = (dist / path).resolve()
+        if path and candidate.is_file() and candidate.is_relative_to(dist):
+            return FileResponse(candidate)
+        return FileResponse(index_html, headers={"Cache-Control": "no-cache"})

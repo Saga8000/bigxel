@@ -174,8 +174,10 @@ SCREENS = [
 
 def run() -> None:
     settings = get_settings()
-    if not settings.is_development:
-        raise SystemExit("Seeding is only allowed when APP_ENV=development")
+    if not settings.allows_demo_features:
+        raise SystemExit("Seeding is not allowed when APP_ENV=production")
+    if not settings.is_development and "DEMO_PASSWORD" not in os.environ:
+        raise SystemExit("Set DEMO_PASSWORD to seed outside development (the default password is public)")
     db = SessionLocal()
     try:
         if db.scalar(select(User.id).limit(1)):
@@ -208,9 +210,7 @@ def run() -> None:
         db.flush()
 
         adv = users[Role.advertiser]
-        wallet.record(
-            db, adv.id, TransactionType.topup, 50000, "Simulated top-up (development mode)", is_simulated=True
-        )
+        wallet.record(db, adv.id, TransactionType.topup, 50000, "Simulated top-up (demo)", is_simulated=True)
         start = date.today() + timedelta(days=3)
         end = start + timedelta(days=13)
         camp = Campaign(

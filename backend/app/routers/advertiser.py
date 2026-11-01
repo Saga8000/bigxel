@@ -171,9 +171,7 @@ def topup(data: TopupIn, user: User = Depends(require_advertiser), db: Session =
         )
     if data.amount > settings.max_topup_amount:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Maximum top-up is ₹{settings.max_topup_amount:,}")
-    wallet.record(
-        db, user.id, TransactionType.topup, data.amount, "Simulated top-up (development mode)", is_simulated=True
-    )
+    wallet.record(db, user.id, TransactionType.topup, data.amount, "Simulated top-up (demo)", is_simulated=True)
     db.commit()
     return get_wallet(user, db)
 

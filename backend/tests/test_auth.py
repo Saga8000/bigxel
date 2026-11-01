@@ -114,3 +114,21 @@ def test_session_endpoint_anonymous_returns_null(client):
     r = client.get("/api/auth/session")
     assert r.status_code == 200
     assert r.json() is None
+
+
+def test_database_url_gets_psycopg_driver():
+    from app.config import Settings
+
+    s = Settings(database_url="postgres://u:p@h:5432/d", test_database_url="postgresql://u:p@h/t", _env_file=None)
+    assert s.database_url == "postgresql+psycopg://u:p@h:5432/d"
+    assert s.test_database_url == "postgresql+psycopg://u:p@h/t"
+
+
+def test_reset_link_hidden_outside_development(client, monkeypatch):
+    from app.config import get_settings
+
+    signup(client, "advertiser", "r@example.com")
+    monkeypatch.setattr(get_settings(), "app_env", "staging")
+    r = client.post("/api/auth/forgot-password", json={"email": "r@example.com"})
+    assert r.status_code == 200
+    assert r.json().get("dev_reset_url") is None

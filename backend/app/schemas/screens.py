@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.config import get_settings
 from app.models import ScreenStatus
 from app.schemas.common import ORMModel
 
@@ -45,7 +46,7 @@ class ScreenBase(BaseModel):
     @field_validator("image_url")
     @classmethod
     def _image(cls, v: str | None) -> str | None:
-        if v and not (v.startswith("/uploads/") or v.startswith("/images/")):
+        if v and not (get_settings().is_uploaded_url(v) or v.startswith("/images/")):
             raise ValueError("Image must be an uploaded file")
         return v or None
 

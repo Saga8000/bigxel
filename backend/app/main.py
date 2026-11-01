@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routers import admin, advertiser, auth, contact, owner, screens, uploads
+from app.routers import admin, advertiser, auth, contact, owner, payments, screens, uploads
 
 logger = logging.getLogger("bigxel")
 settings = get_settings()
@@ -23,6 +23,8 @@ app.add_middleware(
 )
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Server-to-server callbacks authenticated by their own signature, not by cookies.
+CSRF_EXEMPT_PATHS = {"/api/payments/razorpay/webhook"}
 
 
 @app.middleware("http")
@@ -32,6 +34,7 @@ async def csrf_guard(request: Request, call_next):
     if (
         request.method in UNSAFE_METHODS
         and request.url.path.startswith("/api/")
+        and request.url.path not in CSRF_EXEMPT_PATHS
         and request.headers.get("x-requested-with") != "XMLHttpRequest"
     ):
         return JSONResponse(status_code=403, content={"detail": "Missing X-Requested-With header"})
@@ -60,7 +63,7 @@ def health() -> dict:
     return {"status": "ok", "env": settings.app_env, "payments_mode": settings.payments_mode}
 
 
-for r in (auth, screens, uploads, contact, advertiser, owner, admin):
+for r in (auth, screens, uploads, contact, advertiser, owner, admin, payments):
     app.include_router(r.router)
 
 settings.upload_dir.mkdir(parents=True, exist_ok=True)

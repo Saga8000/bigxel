@@ -22,9 +22,25 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     frontend_url: str = "http://localhost:5173"
 
-    # "simulated" lets advertisers add fake wallet credit for development.
-    # "disabled" turns top-ups off until a real payment gateway is integrated.
+    # "simulated" adds fake wallet credit (development/staging only),
+    # "razorpay" takes real payments through Razorpay Checkout, "disabled" turns top-ups off.
     payments_mode: str = "simulated"
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
+
+    # Transactional email. Without a Resend API key no emails are sent.
+    resend_api_key: str = ""
+    email_from: str = "BigXel Ads <onboarding@resend.dev>"
+
+    # Upload storage: "local" (backend/uploads) or "s3" (any S3-compatible store such as Cloudflare R2).
+    storage_backend: str = "local"
+    s3_endpoint_url: str = ""
+    s3_region: str = "auto"
+    s3_bucket: str = ""
+    s3_access_key_id: str = ""
+    s3_secret_access_key: str = ""
+    s3_public_base_url: str = ""
     platform_fee_percent: int = 30
     max_topup_amount: int = 100_000
 
@@ -37,9 +53,31 @@ class Settings(BaseSettings):
     @field_validator("payments_mode")
     @classmethod
     def _check_payments_mode(cls, v: str) -> str:
-        if v not in {"simulated", "disabled"}:
-            raise ValueError("PAYMENTS_MODE must be 'simulated' or 'disabled'")
+        if v not in {"simulated", "razorpay", "disabled"}:
+            raise ValueError("PAYMENTS_MODE must be 'simulated', 'razorpay' or 'disabled'")
         return v
+
+    @field_validator("storage_backend")
+    @classmethod
+    def _check_storage(cls, v: str) -> str:
+        if v not in {"local", "s3"}:
+            raise ValueError("STORAGE_BACKEND must be 'local' or 's3'")
+        return v
+
+    @field_validator("s3_public_base_url")
+    @classmethod
+    def _strip_slash(cls, v: str) -> str:
+        return v.rstrip("/")
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.resend_api_key)
+
+    def is_uploaded_url(self, url: str) -> bool:
+        """True for files produced by our upload endpoint (local or object storage)."""
+        if url.startswith("/uploads/"):
+            return True
+        return bool(self.s3_public_base_url) and url.startswith(self.s3_public_base_url + "/")
 
     @field_validator("app_env")
     @classmethod
@@ -82,4 +120,11 @@ def get_settings() -> Settings:
         settings.secret_key = secrets.token_urlsafe(48)
     if settings.payments_mode == "simulated" and not settings.allows_demo_features:
         raise RuntimeError("PAYMENTS_MODE=simulated is not allowed when APP_ENV=production")
+    if settings.payments_mode == "razorpay" and not (settings.razorpay_key_id and settings.razorpay_key_secret):
+        raise RuntimeError("PAYMENTS_MODE=razorpay requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET")
+    if settings.storage_backend == "s3":
+        required = ("s3_endpoint_url", "s3_bucket", "s3_access_key_id", "s3_secret_access_key", "s3_public_base_url")
+        missing = [k.upper() for k in required if not getattr(settings, k)]
+        if missing:
+            raise RuntimeError(f"STORAGE_BACKEND=s3 requires {', '.join(missing)}")
     return settings

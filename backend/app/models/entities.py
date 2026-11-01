@@ -170,6 +170,27 @@ class WalletTransaction(TimestampMixin, Base):
     user: Mapped[User] = relationship()
 
 
+class PaymentStatus(enum.StrEnum):
+    created = "created"
+    paid = "paid"
+
+
+class PaymentOrder(TimestampMixin, Base):
+    """A wallet top-up attempt with an external payment provider (Razorpay)."""
+
+    __tablename__ = "payment_orders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(20), default="razorpay")
+    provider_order_id: Mapped[str] = mapped_column(String(64), unique=True)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    status: Mapped[PaymentStatus] = mapped_column(_enum(PaymentStatus, "payment_status"), default=PaymentStatus.created)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    wallet_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("wallet_transactions.id", ondelete="SET NULL"))
+
+
 class ContactMessage(TimestampMixin, Base):
     __tablename__ = "contact_messages"
 

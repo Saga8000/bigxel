@@ -9,10 +9,18 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import get_settings
 from app.database import get_db
 from app.deps import require_advertiser
-from app.models import Booking, BookingStatus, Campaign, Screen, ScreenStatus, TransactionType, User
+from app.models import Booking, BookingStatus, Campaign, PaymentOrder, Screen, ScreenStatus, TransactionType, User
 from app.routers.serializers import campaign_out
-from app.schemas.campaigns import CampaignCreate, CampaignOut, TopupIn, TransactionOut, WalletOut
-from app.services import wallet
+from app.schemas.campaigns import (
+    CampaignCreate,
+    CampaignOut,
+    PaymentOrderOut,
+    PaymentVerifyIn,
+    TopupIn,
+    TransactionOut,
+    WalletOut,
+)
+from app.services import payments, razorpay, wallet
 from app.services.pricing import booking_amount, owner_share
 
 router = APIRouter(prefix="/api/advertiser", tags=["advertiser"])
@@ -173,6 +181,49 @@ def topup(data: TopupIn, user: User = Depends(require_advertiser), db: Session =
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Maximum top-up is ₹{settings.max_topup_amount:,}")
     wallet.record(db, user.id, TransactionType.topup, data.amount, "Simulated top-up (demo)", is_simulated=True)
     db.commit()
+    return get_wallet(user, db)
+
+
+def _require_razorpay() -> None:
+    if get_settings().payments_mode != "razorpay":
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Online payments are not enabled.")
+
+
+@router.post("/wallet/orders", response_model=PaymentOrderOut, status_code=status.HTTP_201_CREATED)
+def create_payment_order(
+    data: TopupIn, user: User = Depends(require_advertiser), db: Session = Depends(get_db)
+) -> PaymentOrderOut:
+    _require_razorpay()
+    settings = get_settings()
+    if data.amount > settings.max_topup_amount:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Maximum top-up is ₹{settings.max_topup_amount:,}")
+    try:
+        rp = razorpay.create_order(data.amount, receipt=f"wallet-{user.id}", notes={"user_id": str(user.id)})
+    except razorpay.RazorpayError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Payment provider is unavailable. Please try again.") from e
+    db.add(PaymentOrder(user_id=user.id, provider_order_id=rp["id"], amount=data.amount))
+    db.commit()
+    return PaymentOrderOut(
+        order_id=rp["id"],
+        key_id=settings.razorpay_key_id,
+        amount=data.amount,
+        amount_paise=data.amount * 100,
+        currency="INR",
+        prefill_name=user.full_name,
+        prefill_email=user.email,
+        prefill_contact=user.phone,
+    )
+
+
+@router.post("/wallet/orders/verify", response_model=WalletOut)
+def verify_payment(
+    data: PaymentVerifyIn, user: User = Depends(require_advertiser), db: Session = Depends(get_db)
+) -> WalletOut:
+    _require_razorpay()
+    if not razorpay.verify_payment_signature(data.razorpay_order_id, data.razorpay_payment_id, data.razorpay_signature):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Payment could not be verified")
+    if not payments.credit_paid_order(db, data.razorpay_order_id, data.razorpay_payment_id, user_id=user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment order not found")
     return get_wallet(user, db)
 
 

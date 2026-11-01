@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.schemas.common import Message
+from app.services import email
 from app.services.security import (
     COOKIE_NAME,
     DUMMY_HASH,
@@ -126,9 +127,11 @@ def me(user: User = Depends(get_current_user)) -> User:
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordOut)
-def forgot_password(data: ForgotPasswordIn, request: Request, db: Session = Depends(get_db)) -> ForgotPasswordOut:
+def forgot_password(
+    data: ForgotPasswordIn, request: Request, background: BackgroundTasks, db: Session = Depends(get_db)
+) -> ForgotPasswordOut:
     settings = get_settings()
-    generic = "If an account exists for this email, password reset instructions have been generated."
+    generic = "If an account exists for this email, we've sent password reset instructions."
     key = _client_ip(request)
     if reset_limiter.is_limited(key):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many requests. Try again later.")
@@ -143,8 +146,10 @@ def forgot_password(data: ForgotPasswordIn, request: Request, db: Session = Depe
     db.commit()
 
     reset_url = f"{settings.frontend_url}/reset-password?token={raw}"
-    # No email provider is configured. In development the link is returned so the flow can be tested.
-    if settings.is_development:
+    if settings.email_enabled:
+        background.add_task(email.send_password_reset, user.email, user.full_name, reset_url)
+    elif settings.is_development:
+        # No email provider configured: return the link so the flow can be tested locally.
         return ForgotPasswordOut(detail=generic, dev_reset_url=reset_url)
     return ForgotPasswordOut(detail=generic)
 

@@ -1,11 +1,14 @@
+import tempfile
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app.config import get_settings
 from app.deps import get_current_user
 from app.models import User
+from app.services import storage
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 
@@ -39,22 +42,17 @@ async def upload_file(file: UploadFile, user: User = Depends(get_current_user)) 
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only JPG, PNG, WEBP images or MP4 videos are allowed")
     ext, kind = detected
 
-    settings.upload_dir.mkdir(parents=True, exist_ok=True)
     name = f"{uuid.uuid4().hex}.{ext}"
-    path = settings.upload_dir / name
     size = len(header)
-    try:
-        with path.open("wb") as out:
-            out.write(header)
-            while chunk := await file.read(CHUNK):
-                size += len(chunk)
-                if size > max_bytes:
-                    raise HTTPException(
-                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        f"File is larger than {settings.max_upload_mb} MB",
-                    )
-                out.write(chunk)
-    except HTTPException:
-        path.unlink(missing_ok=True)
-        raise
-    return UploadOut(url=f"/uploads/{name}", kind=kind)
+    with tempfile.SpooledTemporaryFile(max_size=CHUNK * 8) as buf:
+        buf.write(header)
+        while chunk := await file.read(CHUNK):
+            size += len(chunk)
+            if size > max_bytes:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    f"File is larger than {settings.max_upload_mb} MB",
+                )
+            buf.write(chunk)
+        url = await run_in_threadpool(storage.save, buf, name, ext)
+    return UploadOut(url=url, kind=kind)

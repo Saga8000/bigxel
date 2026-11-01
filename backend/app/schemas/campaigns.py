@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.config import get_settings
 from app.models import BookingStatus, TransactionType
 from app.schemas.common import ORMModel
 
@@ -17,7 +18,7 @@ class CampaignCreate(BaseModel):
     @field_validator("creative_url")
     @classmethod
     def _creative(cls, v: str) -> str:
-        if not v.startswith("/uploads/"):
+        if not get_settings().is_uploaded_url(v):
             raise ValueError("Upload your ad creative first")
         return v
 
@@ -117,3 +118,20 @@ class WalletOut(BaseModel):
 
 class TopupIn(BaseModel):
     amount: int = Field(ge=100)
+
+
+class PaymentOrderOut(BaseModel):
+    order_id: str
+    key_id: str
+    amount: int
+    amount_paise: int
+    currency: str
+    prefill_name: str
+    prefill_email: str
+    prefill_contact: str | None
+
+
+class PaymentVerifyIn(BaseModel):
+    razorpay_order_id: str = Field(max_length=64)
+    razorpay_payment_id: str = Field(max_length=64)
+    razorpay_signature: str = Field(max_length=128)

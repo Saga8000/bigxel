@@ -129,7 +129,7 @@ export interface AdminTransaction extends Transaction {
 
 export interface Wallet {
   balance: number;
-  payments_mode: "simulated" | "disabled";
+  payments_mode: "simulated" | "razorpay" | "disabled";
   max_topup_amount: number;
   transactions: Transaction[];
 }
@@ -145,4 +145,15 @@ export interface ContactMessage {
   details: Record<string, string>;
   is_resolved: boolean;
   created_at: string;
+}
+
+export interface PaymentOrder {
+  order_id: string;
+  key_id: string;
+  amount: number;
+  amount_paise: number;
+  currency: string;
+  prefill_name: string;
+  prefill_email: string;
+  prefill_contact: string | null;
 }

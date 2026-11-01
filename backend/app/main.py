@@ -72,7 +72,7 @@ if settings.frontend_dist and (settings.frontend_dist / "index.html").is_file():
     dist = settings.frontend_dist.resolve()
     index_html = dist / "index.html"
 
-    @app.get("/{path:path}", include_in_schema=False)
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     def spa(path: str) -> Response:
         if path.startswith(("api/", "uploads/")):
             return JSONResponse(status_code=404, content={"detail": "Not found"})

@@ -108,3 +108,9 @@ def test_deactivated_user_loses_access(make_client, db):
     assert adv.get("/api/auth/me").status_code == 401
     r = make_client().post("/api/auth/login", json={"identifier": "d@example.com", "password": PASSWORD})
     assert r.status_code == 403
+
+
+def test_session_endpoint_anonymous_returns_null(client):
+    r = client.get("/api/auth/session")
+    assert r.status_code == 200
+    assert r.json() is None

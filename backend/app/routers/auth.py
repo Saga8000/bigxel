@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import get_current_user
+from app.deps import get_current_user, get_current_user_optional
 from app.models import PasswordResetToken, Role, User
 from app.schemas.auth import (
     PHONE_RE,
@@ -112,6 +112,12 @@ def login(data: LoginIn, request: Request, response: Response, db: Session = Dep
 def logout(response: Response) -> Message:
     response.delete_cookie(COOKIE_NAME, path="/")
     return Message(detail="Logged out")
+
+
+@router.get("/session", response_model=UserOut | None)
+def session(user: User | None = Depends(get_current_user_optional)) -> User | None:
+    """Like /me but returns null for anonymous visitors instead of 401."""
+    return user
 
 
 @router.get("/me", response_model=UserOut)

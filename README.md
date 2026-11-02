@@ -91,16 +91,26 @@ To build and run the image yourself: `docker build -t bigxel .`, then `docker ru
 - Uploads (JPG/PNG/WEBP/MP4) are checked by their file signature and size.
 - Wallet transactions are stored in an append-only ledger. Bookings lock database rows and check screen capacity before charging the wallet.
 
-## Not yet integrated (development stand-ins)
+## Integrations
+
+Each integration switches on only when its settings are present (see `backend/.env.example`). Without them the app falls back to the development stand-in.
+
+| Area | How to enable | Without it |
+|---|---|---|
+| Payments (Razorpay) | Set `PAYMENTS_MODE=razorpay`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Add a webhook at `/api/payments/razorpay/webhook` (events `payment.captured` and `order.paid`) and set `RAZORPAY_WEBHOOK_SECRET`. | `simulated` (development/staging only) or `disabled` |
+| Password-reset email (Resend) | Set `RESEND_API_KEY` and an `EMAIL_FROM` on a domain verified in Resend | Development shows the link on screen; elsewhere no email is sent |
+| Upload storage (Cloudflare R2 / S3) | Set `STORAGE_BACKEND=s3` and the `S3_*` settings, with a public bucket URL | Files are saved to `backend/uploads/`, which is lost on most hosting platforms when the server is redeployed |
+
+How top-ups work: the server creates a Razorpay order, and the browser opens Razorpay Checkout. The wallet is credited only after the server checks Razorpay's HMAC signature, either from the browser callback or from the webhook. Each order is credited at most once.
+
+## Still not integrated
 
 | Area | Current behaviour | Needed for production |
 |---|---|---|
-| Payments | `PAYMENTS_MODE=simulated` adds fake wallet top-ups, labelled "Simulated". This only works when `APP_ENV=development`. | A payment gateway such as Razorpay or Stripe, with webhook-confirmed top-ups |
-| Owner payouts | Earnings are recorded in the ledger only | Bank payout integration |
-| Password reset email | No email is sent. In development the API returns the reset link and the page shows it. | An email provider (SMTP, SES, etc.) |
+| Owner payouts | Earnings are recorded in the ledger only | Bank payouts, e.g. RazorpayX |
+| Refunds to card/UPI | Cancellations and refunds go back to the BigXel wallet | Razorpay refunds API if money must go back to the original payment method |
 | Google / Facebook login | Buttons are disabled | OAuth app credentials |
 | Analytics | Based on bookings and spend only | A screen player/proof-of-play integration for impressions |
 | Marketing stats, team, social links | Labelled as illustrative placeholders | Real content |
 | Legal pages | Placeholder text | Legal review |
 | Rate limiting | In-process memory | A shared store (e.g. Redis) when running multiple workers |
-| Uploads | Stored on local disk in `backend/uploads/` | Object storage / CDN |

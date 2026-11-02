@@ -110,9 +110,8 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-@lru_cache
-def get_settings() -> Settings:
-    settings = Settings()
+def validate_settings(settings: Settings) -> Settings:
+    """Fail fast on unsafe or incomplete configuration."""
     if not settings.secret_key:
         if not settings.is_development:
             raise RuntimeError("SECRET_KEY must be set outside development")
@@ -128,3 +127,8 @@ def get_settings() -> Settings:
         if missing:
             raise RuntimeError(f"STORAGE_BACKEND=s3 requires {', '.join(missing)}")
     return settings
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return validate_settings(Settings())
